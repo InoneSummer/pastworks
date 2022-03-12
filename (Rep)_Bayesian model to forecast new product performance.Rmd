@@ -1,0 +1,1225 @@
+---
+title: "Replicate_Bayesian_model_to_forecast_newproduct_performance"
+author: "Inwon"
+date: '2022 3 12 '
+output: html_document
+---
+
+ 
+#This is Replicate work of marketing paper 
+#Neelamegham, Ramya, and Pradeep Chintagunta. "A Bayesian model to forecast new product performance in domestic and international markets." Marketing Science 18.2 (1999): 115-136.
+
+
+#Keywords : mcmc, hierarchical bayesian, bayesian prediction, forecasting , movie marketing, rjags, runjags  
+
+
+
+#재현연구는 코로나 이전 2017~2018년 2개년 3595개의 데이터로 진행되었다. 데이터는(“Box Office Mojo”, n.d.) 사이트에서 국내(미국, 캐나다) 및 타국 국가별 weekends 데이터를 수집했다. 
+
+#영화는 2017~18년 top 30개 영화에 대한 데이터를 추출했으며 20/10개로 홀드아웃방식으로 샘플을 분리하였다.또한 18년 기준 상위 소비국으로는 미국/캐나다, 호주, 브라질,중국, 프랑스, 독일, 멕시코, 한국 영국이 선정되었다. 
+
+#이 중 중국의 경우 극장 수를 제공하지 않고 영화가 5주 혹은 9주만 상영하는 데 비해 많은 객수가 몰려 unobserved heterogeneity를 과도하게 제공하여 estimation에서는 제외하였다.
+
+#변수추정 : 관람객수는 gross 매출 데이터에서 각 국의 연도별 평균 영화
+티켓값으로 나눠 산출하였다. 환율은 편의 상 현재 환율로 통일하였다.스크린 수는 극장 수가 제공되는 데이터에 한해 극장 당 평균 관수 7관에 30%를 곱하여 산출하였다. 누적관객수 중 첫 주의 관객수는 원래는 0이나 시사회 인원을 감안하여 100명으로 일괄 입력하여 에러를 피했다
+
+
+#Data 
+```{r}
+library(dplyr)
+data <- read.csv("dat2.csv")
+str(data)
+```
+
+```{r}
+data$ticket <- NULL
+data$dist <- rep(0,length(data$no))
+train <-data[1:2415,] 
+test <- data[2416:3595,]  
+```
+
+#Country-specific 
+```{r}
+tr_domestic <- train%>%
+  group_by(country)%>%
+  filter(country=="Domestic")
+tr_Aust <- train%>%
+  group_by(country)%>%
+  filter(country=="Austraila")
+tr_Brazil <- train%>%
+  group_by(country)%>%
+  filter(country=="Brazil")
+tr_China <- train%>%
+  group_by(country)%>%
+  filter(country=="China")
+tr_France <- train%>%
+  group_by(country)%>%
+  filter(country=="France")
+tr_Germany <- train%>%
+  group_by(country)%>%
+  filter(country=="Germany")
+tr_Mexico <- train%>%
+  group_by(country)%>%
+  filter(country=="Mexico")
+tr_Korea <- train%>%
+  group_by(country)%>%
+  filter(country=="Korea")
+tr_UK <- train%>%
+  group_by(country)%>%
+  filter(country=="UK")
+```
+
+#Part 1 : Domestic 
+
+
+#1. Stage 1 
+#영화별 주별 관람객수 Vmct는 포아송 분포를 따른다고 가정한다. 파라미터와 계수들은 상호독립을 가정하고 지수 연결함수를 이용해 독립성의 곱셈을 덧셈으로 전환, 영화별로 데이터를 나눈 후 해당 주의 길이로 나눠 로그 취한 후 람다를 계산하였다. 
+
+```{r}
+v <-tr_domestic$sumviewers
+title <- distinct(tr_domestic,Title)
+titles <- as.vector(title)
+length <-length(tr_domestic$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_domestic$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_domestic$sumviewers
+      lambdamct11 <- exp(-log(tlength)+log(v_mct))
+      lambdamct11[is.infinite(lambdamct11)]<-0
+    }
+  }
+}
+```
+
+
+```{r}
+v <-tr_Aust$sumviewers
+length <-length(tr_Aust$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_Aust$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_Aust$sumviewers
+      lambdamct12 <- exp(-log(tlength)+log(v_mct))
+      lambdamct12[is.infinite(lambdamct12)]<-0
+    }
+  }
+}
+```
+
+
+```{r}
+v <-tr_Brazil$sumviewers
+length <-length(tr_Brazil$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_Brazil$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_Brazil$sumviewers
+      lambdamct13 <- exp(-log(tlength)+log(v_mct))
+      lambdamct13[is.infinite(lambdamct13)]<-0 
+    }
+  }
+}
+```
+
+
+```{r}
+v <-tr_China$sumviewers
+length <-length(tr_China$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_China$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_China$sumviewers
+      lambdamct14 <- exp(-log(tlength)+log(v_mct))
+      lambdamct14[is.infinite(lambdamct14)]<-0
+    }
+  }
+}
+```
+
+```{r}
+v <-tr_France$sumviewers
+length <-length(tr_France$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_France$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_France$sumviewers
+      lambdamct15 <- exp(-log(tlength)+log(v_mct))
+      lambdamct15[is.infinite(lambdamct15)]<-0
+    }
+  }
+}
+```
+
+```{r}
+v <-tr_Germany$sumviewers
+length <-length(tr_Germany$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_Germany$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_Germany$sumviewers
+      lambdamct16 <- exp(-log(tlength)+log(v_mct))
+      lambdamct16[is.infinite(lambdamct16)]<-0
+    }
+  }
+}
+```
+
+```{r}
+v <-tr_Mexico$sumviewers
+length <-length(tr_Mexico$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_Mexico$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_Mexico$sumviewers
+      lambdamct17 <- exp(-log(tlength)+log(v_mct))
+      lambdamct17[is.infinite(lambdamct17)]<-0
+    }
+  }
+}
+```
+
+```{r}
+v <-tr_Korea$sumviewers
+length <-length(tr_Korea$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_Korea$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_Korea$sumviewers
+      lambdamct18 <- exp(-log(tlength)+log(v_mct))
+      lambdamct18[is.infinite(lambdamct18)]<-0
+    }
+  }
+}
+```
+
+```{r}
+v <-tr_UK$sumviewers
+length <-length(tr_UK$viewers)
+
+for (i in 1:length){
+  for (title in titles){
+    t=tr_UK$trend 
+    tlength<- length(t)
+    for(t in 1:tlength){
+      v_mct<-tr_UK$sumviewers
+      lambdamct19 <- exp(-log(tlength)+log(v_mct))
+      lambdamct19[is.infinite(lambdamct19)]<-0
+    }
+  }
+}
+
+#for (i in 1:length){
+#  for (title in titles){
+#    t=tr_UK$trend 
+#    tlength<- length(t)
+#    for(t in 1:tlength){
+#     v_mct<-tr_UK$sumviewers
+#      lambda1 <- exp(-log(tlength)+log(v_mct))
+#      lambda1[is.infinite(lambda1)]<-0
+#      lambdamct19 <- rpois(n=tlength, lambda= lambda1)
+#    }
+#  }
+#}
+```
+
+
+#2. stage 2 : 변수별 계수 측정하기 
+
+#개봉 스크린수와 트렌드, 전주 까지의 누적관객수가 영화별, 주별로 계산된다.
+
+#장르에서는 스릴러, 액션, 로맨스, 드라마에 각각 더미변수를 설정하고 comedy를 베이스라인으로 삼아 회귀분석을 진행하였다.
+
+#원 연구와 달라진 점으로는 첫째, 실험 대상인 상위 영화가 모두 메이저 제작사의 작품으로 인해 독립영화여부를 결정하는 dist 변수의 영향이 사라졌다. 또한 드라마 영화도 계수가 모두 NA로 나왔다. 이에 따라 두 변수는 생략하였다.  
+
+```{r}
+#domestic 
+Psai_do<-log(lambdamct11)
+Psai_do[is.infinite(Psai_do)] <-0
+domestic<-lm(Psai_do~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_domestic)
+domestic$coefficients
+do_alpha <- domestic$coefficient[1]
+do_beta <-c(domestic$coefficient[2],domestic$coefficient[4],domestic$coefficient[5])
+do_gamma <-c(domestic$coefficient[6:9])
+```
+
+
+
+```{r}
+#Austrilia
+Psai_au<- log(lambdamct12)
+Psai_au[is.infinite(Psai_au)] <-0
+
+aust<-lm(Psai_au~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_Aust)
+aust$coefficient
+aust_alpha <- aust$coefficient[1]
+aust_beta <-c(aust$coefficient[2],aust$coefficient[4:5])
+aust_gamma <-c(aust$coefficient[6:9])
+```
+
+```{r}
+#Brazil
+Psai_br<- log(lambdamct13)
+Psai_br[is.infinite(Psai_br)] <-0
+
+
+br<-lm(Psai_br~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_Brazil)
+br$coefficient
+br_alpha <- br$coefficient[1]
+br_beta <-c(br$coefficient[2],br$coefficient[4:5])
+br_gamma <-c(br$coefficient[6:9])
+```
+
+
+#중국의 경우 거의 모든 상영주수를 5주 혹은 9주로 제한하는 특성이 있다. 또한 극장 수가 제공되지 않아 스크린 수를 구할 수 없었다. 이에 따라 인터셉트가 940으로 10 미만인 다른 국가 계수들에 비해 아웃라이어로 크게 나오는 반편, 감마에 해당 하는 장르 계수가 모두 NA로 나오는 등, estimation 활용에 무리가 있어 제외하였다. 
+```{r}
+#China 
+Psai_ch<- log(lambdamct14)
+Psai_ch[is.infinite(Psai_ch)] <-0
+
+
+ch<-lm(Psai_ch~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_China)
+ch$coefficient
+ch_alpha <- ch$coefficient[1]
+ch_beta <-c(ch$coefficient[2],ch$coefficient[4:5])
+ch_gamma <-c(ch$coefficient[6:9])
+```
+
+
+
+```{r}
+#France
+Psai_fr<- log(lambdamct15)
+Psai_fr[is.infinite(Psai_fr)] <-0
+
+
+fr<-lm(Psai_fr~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_France)
+fr$coefficient
+fr_alpha <- fr$coefficient[1]
+fr_beta <-c(fr$coefficient[2],fr$coefficient[4:5])
+fr_gamma <-c(fr$coefficient[6:9])
+```
+
+```{r}
+#Germany
+Psai_ge<- log(lambdamct16)
+Psai_ge[is.infinite(Psai_ge)] <-0
+
+
+ge<-lm(Psai_ge~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_Germany)
+ge$coefficient
+ge_alpha <- ge$coefficient[1]
+ge_beta <-c(ge$coefficient[2],ge$coefficient[4:5])
+ge_gamma <-c(ge$coefficient[6:9])
+ge_gamma [is.na(ge_gamma)] <-0
+```
+
+
+```{r}
+#Mexico
+Psai_me<- log(lambdamct17)
+Psai_me[is.infinite(Psai_me)] <-0
+
+
+me<-lm(Psai_me~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_Mexico)
+me$coefficient
+me_alpha <- me$coefficient[1]
+me_beta <-c(me$coefficient[2],me$coefficient[4:5])
+me_gamma <-c(me$coefficient[6:9])
+me_gamma [is.na(me_gamma)] <-0
+```
+
+```{r}
+#South Korea
+Psai_ko<- log(lambdamct18)
+Psai_ko[is.infinite(Psai_ko)] <-0
+
+
+ko<-lm(Psai_ko~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_Korea)
+ko$coefficient
+ko_alpha <- ko$coefficient[1]
+ko_beta <-c(ko$coefficient[2],me$coefficient[4:5])
+ko_gamma <-c(ko$coefficient[6:9])
+ko_gamma [is.na(ko_gamma)] <-0
+```
+
+```{r}
+#UK
+Psai_uk<- log(lambdamct19)
+Psai_uk[is.infinite(Psai_uk)] <-0
+
+
+uk<-lm(Psai_uk~log(screens)+dist+trend+log(cumviewers)+stars+thriller+action+romance+drama,data=tr_UK)
+uk$coefficient
+uk_alpha <- uk$coefficient[1]
+uk_beta <-c(uk$coefficient[2],me$coefficient[4:5])
+uk_gamma <-c(uk$coefficient[6:9])
+uk_gamma [is.na(uk_gamma)] <-0
+```
+
+
+
+
+#3. Stage 3 : 국가별 파라미터 추정하기 
+
+# 국가 간 파라미터는 정규분포를 따른다고 가정하며, 여기서 특정국가의 파라미터를 도출한다. hyper prior는 non informative 한 상태로 베타와 감마의 평균은 diffuse normal 분포를 따른다.
+#알파, 베타, 감마의 분산은 원연구에 따라 inverse gamma를 따른다고 가정한다. 정확도는 분산의 역수값으로 계산된다. 
+#나라별 알파베타감마를 통해 회귀분석을 진행, 람다를 재추출한다.  
+#MCMC는 파라미터의 결합사후분포로 주변사후분포를 만들어내는데 쓰인다. 
+#rjags로 mcmc를 돌리고, runjags를 활용해 parallel 모드로 체인을 돌리고 사후 변수들을 추출했다. 
+
+#mcmc는 4개의 체인으로 각 만번 돌렸으며, 초반 2천개는 번인 확인, 겔만 루빈분석으로 1로 수렴되는지 여부를 확인하였다. 
+
+#alpha 
+```{r}
+alphas <-c(do_alpha, aust_alpha, br_alpha, fr_alpha, ge_alpha, me_alpha, ko_alpha, uk_alpha)
+mean_alpah_global = mean(alphas)
+sd_alpha_global <-sd(alphas)
+print(sd_alpha)
+```
+
+
+```{r}
+alphaC<-as.vector(rnorm(n=10000, mean= mean_alpah_global, sd= sd_alpha_global)) 
+alphax <- as.vector(rgamma(10000, 1,1))
+Ntotal = 10000
+model_alpha=sd_alpha
+
+dataList= list(
+  y=alphaC,
+  Ntotal=Ntotal,
+  alpha=model_alpha 
+)
+```
+
+```{r}
+model <- " 
+model {
+  for ( i in 1:Ntotal){
+    y[i]~dnorm(0, 1/tau)
+  }
+    tau~dgamma(alpha ,1)
+}
+"
+writeLines(model, con="alpha.txt")
+```
+
+```{r}
+jagsModel <- jags.model(file="alpha.txt", data=dataList, n.chains = 4, n.adapt = 500)
+update(jagsModel, n.iter=5000)
+```
+
+```{r}
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+```{r}
+source("DBDA2E-utilities.R")
+```
+
+
+```{r}
+mcmcMat = as.matrix(codaSample,chains=TRUE)
+tau<- as.vector(mcmcMat[,2])
+y <- as.vector(mcmcMat[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "y"=summarizePost(y))
+summaryInfo <- rbind (summaryInfo, "tau"=summarizePost(tau))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((y-compVal)/tau),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+```{r}
+y<-y_global
+```
+
+
+
+```{r}
+nChains=4
+nAdaptSteps =2000
+nBurninSteps =2000
+nUseSteps =10000
+nThinSteps =1
+```
+
+
+
+#statistics 구하기 
+
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="alpha.txt",
+                       monitor = c("tau"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+asummary<-summary(codaSample2)
+aDostat<-asummary$statistics
+aDostat
+```
+
+
+
+
+
+
+#mu_beta, mu_gamma : diffuse normal prior 
+```{r}
+mu_beta~rnorm(n,0,10000)
+betas1 <-c(do_beta[1],aust_beta[1],br_beta[1],fr_beta[1],ge_beta[1],me_beta[1],ko_beta[1],uk_beta[1])
+betas2<- c(do_beta[2],aust_beta[2],br_beta[2],fr_beta[2],ge_beta[2],me_beta[2],ko_beta[2],uk_beta[2])
+betas3 <- c(do_beta[3],aust_beta[3],br_beta[3],fr_beta[3],ge_beta[3],me_beta[3],ko_beta[3],uk_beta[3])
+
+mu_betas1 <-mean(betas1)
+mu_betas2 <-mean(betas2)
+mu_betas3 <-mean(betas3)
+
+sd_beta1 <-sd(betas1)
+sd_beta2 <-sd(betas2)
+sd_beta3 <-sd(betas3)
+
+print(mu_betas1) ; print(mu_betas2) ; print(mu_betas3)
+print(sd_beta1) ; print(sd_beta2); print(sd_beta3)
+```
+
+#beta1 
+```{r}
+beta1C<-as.vector(rnorm(n=10000, mean= 1.263053, sd= 0.2687895)) 
+beta1x<-as.vector(rgamma(10000, 1.263053 ,1))
+Ntotal = 10000
+model_beta=sd_beta1
+mumu=mu_betas1
+dataList= list(
+  y=beta1C,
+  Ntotal=Ntotal,
+  alpha=model_beta, 
+  mumu=mumu
+)
+```
+
+```{r}
+model <- " 
+model {
+  for ( i in 1:Ntotal){
+    y[i]~dnorm(mu, 1/tau)
+  }
+    tau~dgamma(alpha ,1)
+    mu~dnorm(mumu,100)
+}
+"
+writeLines(model, con="beta1.txt")
+```
+
+```{r}
+jagsModel <- jags.model(file="beta1.txt", data=dataList, n.chains = 4, n.adapt = 2000)
+update(jagsModel, n.iter=5000)
+```
+
+```{r}
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+
+
+```{r}
+mcmcMatB1 = as.matrix(codaSample,chains=TRUE)
+taub1<- as.vector(mcmcMatB1[,2])
+yb1 <- as.vector(mcmcMatB1[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yb1"=summarizePost(yb1))
+summaryInfo <- rbind (summaryInfo, "taub1"=summarizePost(taub1))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yb1-compVal)/taub1),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+
+
+
+```{r}
+nChains=4
+nAdaptSteps =2000
+nBurninSteps =2000
+nUseSteps =10000
+nThinSteps =1
+```
+
+
+
+#statistics 구하기 
+
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="beta1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+b1summary<-summary(codaSample2)
+b1Dostat<-b1summary$statistics
+b1Dostat
+```
+
+
+
+
+#beta2
+```{r}
+beta2C<-as.vector(rnorm(n=10000, mean= mu_betas2, sd= sd_beta2)) 
+Ntotal = 10000
+model_beta=sd_beta2
+mumu=mu_betas2
+dataList= list(
+  y=beta2C,
+  Ntotal=Ntotal,
+  alpha=model_beta, 
+  mumu=mumu
+)
+```
+
+```{r}
+jagsModel <- jags.model(file="beta1.txt", data=dataList, n.chains = 4, n.adapt = 2000)
+update(jagsModel, n.iter=5000)
+
+```
+```{r}
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+
+```{r}
+mcmcMatB2 = as.matrix(codaSample,chains=TRUE)
+taub2<- as.vector(mcmcMatB2[,2])
+yb2 <- as.vector(mcmcMatB2[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yb2"=summarizePost(yb2))
+summaryInfo <- rbind (summaryInfo, "taub2"=summarizePost(taub2))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yb2-compVal)/taub2),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+
+
+#statistics 구하기 
+
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="beta1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+b2summary<-summary(codaSample2)
+b2Dostat<-b2summary$statistics
+b2Dostat
+```
+
+
+
+
+
+
+
+#beta3
+```{r}
+beta3C<-as.vector(rnorm(n=10000, mean= mu_betas3, sd= sd_beta3)) 
+Ntotal = 10000
+model_beta=sd_beta3
+mumu=mu_betas3
+dataList= list(
+  y=beta3C,
+  Ntotal=Ntotal,
+  alpha=model_beta, 
+  mumu=mumu
+)
+```
+
+```{r}
+jagsModel <- jags.model(file="beta1.txt", data=dataList, n.chains = 4, n.adapt = 2000)
+update(jagsModel, n.iter=5000)
+```
+
+```{r}
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+
+
+```{r}
+mcmcMatB3 = as.matrix(codaSample,chains=TRUE)
+taub3<- as.vector(mcmcMatB3[,2])
+yb3 <- as.vector(mcmcMatB3[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yb3"=summarizePost(yb3))
+summaryInfo <- rbind (summaryInfo, "taub3"=summarizePost(taub3))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yb3-compVal)/taub3),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+
+#statistics 구하기 
+
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+b3summary<-summary(codaSample2)
+b3Dostat<-b3summary$statistics
+b3Dostat
+```
+
+
+
+
+#Gamma 
+```{r}
+#stars 
+gamma1<-c(do_gamma[1],aust_gamma[1],br_gamma[1],fr_gamma[1],ge_gamma[1],me_gamma[1],ko_gamma[1],uk_gamma[1])
+mu_gamma1 <- mean(gamma1)
+sd_gamma1<-sd(gamma1)
+#thriller
+gamma2<-c(do_gamma[2],aust_gamma[2],br_gamma[2],fr_gamma[2],ge_gamma[2],me_gamma[2],ko_gamma[2],uk_gamma[2])
+mu_gamma2 <- mean(gamma2)
+sd_gamma2<-sd(gamma2)
+#Action 
+gamma3<-c(do_gamma[3],aust_gamma[3],br_gamma[3],fr_gamma[3],ge_gamma[3],me_gamma[3],ko_gamma[3],uk_gamma[3])
+mu_gamma3 <- mean(gamma3)
+sd_gamma3<-sd(gamma3)
+#Romance 
+gamma4<-c(do_gamma[4],aust_gamma[4],br_gamma[4],fr_gamma[4],ge_gamma[4],me_gamma[4],ko_gamma[4],uk_gamma[4])
+mu_gamma4 <- mean(gamma4)
+sd_gamma4<-sd(gamma4)
+
+```
+
+#Gamma1  
+```{r}
+Gamma1C<-as.vector(rnorm(n=10000, mean= mu_gamma1, sd= sd_gamma1)) 
+Ntotal = 10000
+model_gamma=sd_gamma1
+mumu=mu_gamma1
+dataList= list(
+  y=Gamma1C,
+  Ntotal=Ntotal,
+  alpha=model_gamma, 
+  mumu=mumu
+)
+```
+
+```{r}
+model <- " 
+model {
+  for ( i in 1:Ntotal){
+    y[i]~dnorm(mu, 1/tau)
+  }
+    tau~dgamma(alpha ,1)
+    mu~dnorm(mumu,100)
+}
+"
+writeLines(model, con="gamma1.txt")
+```
+
+```{r}
+jagsModel <- jags.model(file="gamma1.txt", data=dataList, n.chains = 4, n.adapt = 2000)
+update(jagsModel, n.iter=5000)
+```
+
+```{r}
+rm(mcmcMatB2, mcmcMatB3)
+```
+
+
+```{r}
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+
+```{r}
+mcmcMatG1 = as.matrix(codaSample,chains=TRUE)
+taug1<- as.vector(mcmcMatG1[,2])
+yg1 <- as.vector(mcmcMatG1[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yg1"=summarizePost(yg1))
+summaryInfo <- rbind (summaryInfo, "taug1"=summarizePost(taug1))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yg1-compVal)/taug1),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+#statistics 구하기 
+
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+g1summary<-summary(codaSample2)
+g1Dostat<-g1summary$statistics
+g1Dostat
+```
+
+
+
+
+
+
+#Gamma2 
+```{r}
+Gamma2C<-as.vector(rnorm(n=10000, mean= mu_gamma2, sd= sd_gamma2)) 
+Ntotal = 10000
+model_gamma=sd_gamma2
+mumu=mu_gamma2
+dataList= list(
+  y=Gamma2C,
+  Ntotal=Ntotal,
+  alpha=model_gamma, 
+  mumu=mumu
+)
+```
+
+
+```{r}
+jagsModel <- jags.model(file="gamma1.txt", data=dataList, n.chains = 4, n.adapt = 2000)
+update(jagsModel, n.iter=5000)
+codaSample = coda.samples(jagsModel,variable.names = c('y','tau'),n.iter=2500)
+```
+
+```{r}
+mcmcMatG2 = as.matrix(codaSample,chains=TRUE)
+taug2<- as.vector(mcmcMatG2[,2])
+yg2 <- as.vector(mcmcMatG2[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yg2"=summarizePost(yg2))
+summaryInfo <- rbind (summaryInfo, "taug2"=summarizePost(taug2))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yg2-compVal)/taug2),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+#statistics 구하기 
+```{r}
+runJagsOut2 <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+g2summary<-summary(codaSample2)
+g2Dostat<-g2summary$statistics
+g2Dostat
+```
+
+
+
+
+
+
+
+
+
+
+
+#Gamma3 
+```{r}
+Gamma3C<-as.vector(rnorm(n=10000, mean= mu_gamma3, sd= sd_gamma3)) 
+Ntotal = 10000
+model_gamma=sd_gamma3
+mumu=mu_gamma3
+dataList= list(
+  y=Gamma3C,
+  Ntotal=Ntotal,
+  alpha=model_gamma, 
+  mumu=mumu
+)
+```
+
+
+```{r}
+library(runjags)
+runJagsOut <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu","y"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample = as.mcmc.list(runJagsOut)
+```
+
+
+
+```{r}
+library(runjags)
+runJagsOut2 <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+g3summary<-summary(codaSample2)
+g3Dostat<-g3summary$statistics
+g3Dostat
+```
+
+
+#1에 근접 수렴 확인 
+```{r}
+require(coda)
+gelman.diag(codaSample2,confidence = 0.95, transform = FALSE, autoburnin = TRUE)
+```
+
+```{r}
+g3summary<-summary(codaSample2)
+g3Dostat<-g3summary$statistics
+g3Dostat
+```
+
+
+
+```{r}
+rm(mcmcMatG1,mcmcMatG2)
+mcmcMatG3 = as.matrix(codaSample,chains=TRUE)
+taug3<- as.vector(mcmcMatG3[,2])
+yg3 <- as.vector(mcmcMatG3[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yg3"=summarizePost(yg3))
+summaryInfo <- rbind (summaryInfo, "taug3"=summarizePost(taug3))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yg3-compVal)/taug3),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+
+
+#Gamma4 
+
+```{r}
+Gamma4C<-as.vector(rnorm(n=10000, mean= mu_gamma4, sd= sd_gamma4)) 
+Ntotal = 10000
+model_gamma=sd_gamma4
+mumu=mu_gamma4
+dataList= list(
+  y=Gamma4C,
+  Ntotal=Ntotal,
+  alpha=model_gamma, 
+  mumu=mumu
+)
+```
+
+
+```{r}
+nChains=4
+nAdaptSteps =2000
+nBurninSteps =2000
+nUseSteps =10000
+nThinSteps =1
+```
+
+```{r}
+library(runjags)
+runJagsOut <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu","y"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample = as.mcmc.list(runJagsOut)
+```
+
+
+
+```{r}
+rm(mcmcMatG3)
+mcmcMatG4 = as.matrix(codaSample,chains=TRUE)
+taug4<- as.vector(mcmcMatG4[,2])
+yg4 <- as.vector(mcmcMatG4[1,3:10002])
+
+compVal<- rep(1,1000)
+summaryInfo <- NULL
+summaryInfo <- rbind (summaryInfo, "yg4"=summarizePost(yg4))
+summaryInfo <- rbind (summaryInfo, "taug4"=summarizePost(taug4))
+summaryInfo <- rbind (summaryInfo, "effSz"=summarizePost((yg4-compVal)/taug4),compVal=compVal , ROPE=NULL)
+summaryInfo
+```
+
+```{r}
+library(runjags)
+runJagsOut2 <- run.jags(method="parallel",
+                       model="gamma1.txt",
+                       monitor = c("tau", "mu"),
+                       data=dataList, 
+                       n.chains = nChains,
+                       adapt=nAdaptSteps,
+                       burnin=nBurninSteps,
+                       sample=ceiling(nUseSteps/nChains),
+                       thin=nThinSteps,
+                       summarise = FALSE,
+                       plots=FALSE
+                       )
+codaSample2 = as.mcmc.list(runJagsOut2)
+g4summary<-summary(codaSample2)
+g4Dostat<-g4summary$statistics
+g4Dostat
+```
+
+
+
+
+
+# Stage 4. Prediction 
+
+# OLS, 포아송회귀, 모델에 대해 돌렸으며, rmse와 mae로 평가하였다. 
+# 결과는 ols와 포아송 회귀가 더 유리한 것으로 나왔다. 
+
+```{r}
+te_domestic <- test%>%
+  group_by(country)%>%
+  filter(country=="Domestic")
+te_Aust <- test%>%
+  group_by(country)%>%
+  filter(country=="Austeaila")
+te_Brazil <- test%>%
+  group_by(country)%>%
+  filter(country=="Brazil")
+te_China <- test%>%
+  group_by(country)%>%
+  filter(country=="China")
+te_France <- test%>%
+  group_by(country)%>%
+  filter(country=="France")
+te_Germany <- test%>%
+  group_by(country)%>%
+  filter(country=="Germany")
+te_Mexico <- test%>%
+  group_by(country)%>%
+  filter(country=="Mexico")
+te_Korea <- test%>%
+  group_by(country)%>%
+  filter(country=="Korea")
+te_UK <- test%>%
+  group_by(country)%>%
+  filter(country=="UK")
+```
+
+
+
+
+```{r}
+sum(is.na(te_Korea)) 
+sum(is.na(te_UK)) 
+sum(is.na(te_domestic)) 
+sum(is.na(te_France)) 
+sum(is.na(te_Germany)) 
+sum(is.na(te_Aust)) 
+sum(is.na(te_Brazil))
+sum(is.na(te_Mexico))
+```
+#te_domestic 으로 시도하기 
+
+```{r}
+test_clean<-na.omit(test)
+```
+
+
+
+
+
+1) ols 
+```{r}
+lm(sumviewers ~ log(screens)+trend+log(cumviewers)+stars+thriller+action+romance+drama, data= test_clean)
+```
+```{r}
+aa <- -61123  
+b1 <-  263378  
+b2 <-  27015
+b3 <-  -107744     
+g1 <-  229913 
+g2 <-  -200653  
+g3 <- 206644 
+g4 <-  -381650 
+g5 <- -108841 
+
+yols <- aa+log(test_clean$screens)*b1+ test_clean$trend*b2 + log(test_clean$cumviewers)*b3 + g1*test_clean$stars + g2*test_clean$thriller+g3*test_clean$action+g4*test_clean$romance+ g5*test_clean$drama 
+```
+
+```{r}
+rmse <- function(y1, y2){
+  sqrt(mean((y1-y2)^2))
+  }
+mae <- function(y1,y2){
+  mean(abs(y1-y2))
+}
+```
+
+```{r}
+yt <- test_clean$sumviewers
+rmse(yt, yols)
+mae(yt, yols)
+```
+2) Poisson 
+```{r}
+poisson.lik<-function(mu,y){
+  n<-length(y)
+  log1<-sum(y)*log(mu)-n*mu
+  return(-log1)
+}
+mu <- mean(yt)
+poisson.lik(mu,yt)
+optim(1, poisson.lik, y=yt, method = "BFGS")
+```
+
+```{r}
+n<-length(yt)
+lambda <- 355017.8
+ypoisson <- rpois(n,lambda= lambda)
+rmse(yt, ypoisson)
+mae(yt, ypoisson)
+```
+
+
+```{r}
+summary(poisson1 <- glm(sumviewers ~ log(screens)+trend+log(cumviewers)+stars+thriller+action+romance+drama, family= "poisson",data= test_clean))
+```
+
+
+```{r}
+aa <- 3.502e+00
+b1 <- 1.377e+00 
+b2 <- -1.069e-01  
+b3 <- -6.088e-02
+g1 <- -2.370e-01
+g2 <- 1.443e-01
+g3 <- 1.774e-01 
+g4 <- 3.394e-01
+g5<- 2.190e-01
+
+ypoir <- aa+log(test_clean$screens)*b1+ test_clean$trend*b2 + log(test_clean$cumviewers)*b3 + g1*test_clean$stars + g2*test_clean$thriller+g3*test_clean$action+g4*test_clean$romance 
+```
+
+```{r}
+rmse(yt, ypoir)
+mae(yt, ypoir)
+```
+
+
+3) 모델 
+```{r}
+AA <- y_global[1:751]
+B1 <- yb1[1:751]
+B2 <- yb2[1:751]
+B3 <- yb3[1:751]
+G1 <- yg1[1:751]
+G2 <- yg2[1:751]
+G3 <- yg3[1:751]
+G4 <- yg4[1:751]
+
+psai <- AA+log(test_clean$screens)*B1+ test_clean$trend*B2 + log(test_clean$cumviewers)*B3 + G1*test_clean$stars + G2*test_clean$thriller+G3*test_clean$action+G4*test_clean$romance 
+```
+
+```{r}
+final<-exp(psai)
+```
+
+```{r}
+ym <- dpois(10,final)
+```
+
+```{r}
+rmse(yt, ym)
+mae(yt, ym)
+```
+
+
+
